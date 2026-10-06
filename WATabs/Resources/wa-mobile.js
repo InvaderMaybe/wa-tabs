@@ -1,4 +1,4 @@
-// wa-mobile v3
+// wa-mobile v4
 // Мобильная обёртка WhatsApp Web: одна колонка за раз, как в приложении.
 // Режим «список»: только список чатов. Режим «чат»: только открытый чат на весь экран.
 // Если открыта панель (инфо о контакте, поиск по чату), на весь экран показывается она.
@@ -27,7 +27,7 @@
   }
 
   var css = [
-    'html, body { overflow-x: hidden !important; }',
+    'html.wa-ready, html.wa-ready body { overflow-x: hidden !important; }',
     '[data-wa-root] { width: 100vw !important; min-width: 0 !important; }',
     '[data-wa-col] { min-width: 0 !important; max-width: none !important; }',
     // список
@@ -85,6 +85,8 @@
     if (!found) return;
     var root = found.root;
     set(root, 'data-wa-root', '');
+    // Вошли в аккаунт: теперь можно запрещать горизонтальную прокрутку (на экране входа она нужна).
+    document.documentElement.classList.add('wa-ready');
 
     var after = false, mainSeen = false;
     panelOpen = false;
@@ -248,12 +250,12 @@
   ensureStyle();
   new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
   schedule();
-  post({ type: 'ready', version: 3 });
+  post({ type: 'ready', version: 4 });
 
   window.__waMobile = {
     back: back,
     refresh: schedule,
-    version: 3,
+    version: 4,
     acceptCall: function () { return press(ACCEPT); },
     declineCall: function () { return press(DECLINE); },
     endCall: function () { return press(HANGUP) || press(DECLINE); },

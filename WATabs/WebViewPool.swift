@@ -11,6 +11,14 @@ final class WebViewPool: ObservableObject {
     @Published private(set) var inChat: [UUID: Bool] = [:]
 
     private(set) var sessions: [UUID: AccountSession] = [:]
+    /// Журнал страницы по аккаунтам (последние 300 строк), см. logScript.
+    private(set) var logs: [UUID: [String]] = [:]
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
 
     static let whatsappURL = URL(string: "https://web.whatsapp.com/")!
     // Десктопный Safari: тот же движок WebKit, WhatsApp Web его поддерживает.
@@ -62,8 +70,17 @@ final class WebViewPool: ObservableObject {
         for id in sessions.keys { run("window.__waMobile && window.__waMobile.keepAlive(\(on))", in: id) }
     }
 
+    func appendLog(_ text: String, level: String, for id: UUID) {
+        var entries = logs[id, default: []]
+        entries.append("\(Self.timeFormatter.string(from: Date())) [\(level)] \(text)")
+        if entries.count > 300 { entries.removeFirst(entries.count - 300) }
+        logs[id] = entries
+    }
+
     fileprivate func handleMessage(_ dict: [String: Any], from id: UUID) {
         switch dict["type"] as? String {
+        case "log":
+            appendLog(dict["text"] as? String ?? "", level: dict["level"] as? String ?? "info", for: id)
         case "mode":
             setInChat(dict["chat"] as? Bool ?? false, for: id)
         case "ready":
@@ -131,6 +148,7 @@ final class AccountSession: NSObject {
         config.mediaTypesRequiringUserActionForPlayback = []
         config.defaultWebpagePreferences.preferredContentMode = .mobile
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
+        config.limitsNavigationsToAppBoundDomains = true
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView.customUserAgent = WebViewPool.userAgent
@@ -157,6 +175,7 @@ final class AccountSession: NSObject {
     func installScript() {
         let ucc = webView.configuration.userContentController
         ucc.removeAllUserScripts()
+        ucc.addUserScript(WKUserScript(source: Self.logScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         ucc.addUserScript(WKUserScript(source: ScriptProvider.shared.source,
                                        injectionTime: .atDocumentEnd,
                                        forMainFrameOnly: true))
@@ -182,6 +201,45 @@ final class AccountSession: NSObject {
         guard let dict = body as? [String: Any] else { return }
         pool?.handleMessage(dict, from: id)
     }
+
+    /// Журнал страницы: ошибки JS, WebSocket, service worker. Смотреть в «Управление → Журнал страницы».
+    static let logScript = """
+    (function () {
+      if (window.__waLog) return;
+      window.__waLog = true;
+      function send(level, text) {
+        try { window.webkit.messageHandlers.wa.postMessage({ type: 'log', level: level, text: String(text).slice(0, 500) }); } catch (e) {}
+      }
+      function fmt(args) {
+        return Array.prototype.map.call(args, function (a) {
+          if (a instanceof Error) return a.name + ': ' + a.message;
+          if (typeof a === 'object') { try { return JSON.stringify(a).slice(0, 200); } catch (e) { return String(a); } }
+          return String(a);
+        }).join(' ');
+      }
+      ['error', 'warn'].forEach(function (level) {
+        var orig = console[level];
+        console[level] = function () { send(level, fmt(arguments)); return orig.apply(console, arguments); };
+      });
+      window.addEventListener('error', function (e) { send('error', 'onerror: ' + e.message + ' @' + (e.filename || '') + ':' + (e.lineno || '')); });
+      window.addEventListener('unhandledrejection', function (e) { send('error', 'rejection: ' + fmt([e.reason])); });
+      var WS = window.WebSocket;
+      window.WebSocket = function (url, protocols) {
+        var ws = protocols === undefined ? new WS(url) : new WS(url, protocols);
+        send('info', 'ws connect ' + url);
+        ws.addEventListener('open', function () { send('info', 'ws open ' + url); });
+        ws.addEventListener('close', function (e) { send('warn', 'ws close ' + e.code + ' ' + (e.reason || '') + ' ' + url); });
+        ws.addEventListener('error', function () { send('error', 'ws error ' + url); });
+        return ws;
+      };
+      window.WebSocket.prototype = WS.prototype;
+      ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'].forEach(function (k) { window.WebSocket[k] = WS[k]; });
+      send('info', 'start ' + location.href + ' sw=' + ('serviceWorker' in navigator) + ' idb=' + ('indexedDB' in window) + ' subtle=' + !!(window.crypto && crypto.subtle) + ' shared=' + ('SharedWorker' in window));
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(function () { send('info', 'sw ready'); });
+      }
+    })();
+    """
 
     private static func isWhatsApp(_ url: URL) -> Bool {
         guard let host = url.host else { return true }   // blob:, data:, about:
@@ -214,7 +272,20 @@ extension AccountSession: WKNavigationDelegate {
         download.delegate = self
     }
 
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        pool?.appendLog("navigation failed: \(error.localizedDescription)", level: "error", for: id)
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        pool?.appendLog("load failed: \(error.localizedDescription)", level: "error", for: id)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        pool?.appendLog("loaded \(webView.url?.absoluteString ?? "")", level: "info", for: id)
+    }
+
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        pool?.appendLog("web process terminated, reloading", level: "error", for: id)
         // iOS выгрузил процесс страницы (обычно из-за памяти). Поднимаем заново, вход сохранится.
         webView.load(URLRequest(url: WebViewPool.whatsappURL))
     }

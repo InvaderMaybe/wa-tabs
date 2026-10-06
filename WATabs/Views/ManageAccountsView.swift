@@ -51,6 +51,12 @@ struct ManageAccountsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
 
+                Section("Журнал страницы") {
+                    ForEach(store.accounts) { account in
+                        NavigationLink(account.name) { PageLogView(account: account) }
+                    }
+                }
+
                 Section("Обёртка WhatsApp") {
                     LabeledContent("Версия скрипта", value: "v\(ScriptProvider.shared.version)")
                     Button("Проверить обновление") {
@@ -73,6 +79,34 @@ struct ManageAccountsView: View {
             }
             .onAppear { zoom = pool.zoom }
         }
+    }
+}
+
+/// Ошибки JS, WebSocket и загрузки страницы: для диагностики, когда WhatsApp не грузится.
+private struct PageLogView: View {
+    @EnvironmentObject private var pool: WebViewPool
+    let account: Account
+    @State private var lines: [String] = []
+
+    var body: some View {
+        ScrollView {
+            Text(lines.isEmpty ? "Пусто" : lines.joined(separator: "\n"))
+                .font(.system(size: 11, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+        }
+        .navigationTitle(account.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Копировать") { UIPasteboard.general.string = lines.joined(separator: "\n") }
+            }
+            ToolbarItem(placement: .bottomBar) {
+                Button("Обновить") { lines = pool.logs[account.id] ?? [] }
+            }
+        }
+        .onAppear { lines = pool.logs[account.id] ?? [] }
     }
 }
 
