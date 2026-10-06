@@ -55,6 +55,7 @@ struct ManageAccountsView: View {
                     ForEach(store.accounts) { account in
                         NavigationLink(account.name) { PageLogView(account: account) }
                     }
+                    NavigationLink("Диагностика хранилища") { DiagnosticsView() }
                 }
 
                 Section("Обёртка WhatsApp") {
@@ -107,6 +108,39 @@ private struct PageLogView: View {
             }
         }
         .onAppear { lines = pool.logs[account.id] ?? [] }
+    }
+}
+
+private struct DiagnosticsView: View {
+    @State private var lines: [String] = []
+    @State private var running = false
+    @State private var diagnostics = StorageDiagnostics()
+
+    var body: some View {
+        List {
+            Section {
+                Button(running ? "Проверяю…" : "Запустить проверку") {
+                    running = true
+                    Task {
+                        lines = await diagnostics.run()
+                        running = false
+                    }
+                }
+                .disabled(running)
+            } footer: {
+                Text("indexedDB / caches / localStorage / SharedWorker для каждой настройки браузера.")
+            }
+            Section("Результат") {
+                ForEach(lines, id: \.self) { Text($0).font(.system(size: 12, design: .monospaced)) }
+            }
+        }
+        .navigationTitle("Диагностика")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Копировать") { UIPasteboard.general.string = lines.joined(separator: "\n") }
+            }
+        }
     }
 }
 
