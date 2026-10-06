@@ -7,6 +7,9 @@ on:
     paths-ignore: ["design/**", "tools/**", "**.md"]
   workflow_dispatch:
 
+permissions:
+  contents: write   # создание релиза по тегу
+
 jobs:
   ipa:
     runs-on: macos-15
