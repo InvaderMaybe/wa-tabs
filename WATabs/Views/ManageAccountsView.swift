@@ -7,6 +7,7 @@ struct ManageAccountsView: View {
 
     @State private var zoom: Double = 1.0
     @State private var scriptStatus: String?
+    @State private var background = BackgroundKeeper.shared.enabled
 
     var body: some View {
         NavigationStack {
@@ -33,6 +34,15 @@ struct ManageAccountsView: View {
                             if !editing { pool.zoom = zoom }
                         }
                     }
+                }
+
+                Section {
+                    Toggle("Работать в фоне", isOn: $background)
+                        .onChange(of: background) { _, on in BackgroundKeeper.shared.enabled = on }
+                } header: {
+                    Text("Уведомления и звонки")
+                } footer: {
+                    Text("Нужно, чтобы приходили уведомления о сообщениях и входящие звонки, когда приложение свёрнуто. Расходует батарею примерно как музыка в фоне.")
                 }
 
                 Section("Подпись приложения") {

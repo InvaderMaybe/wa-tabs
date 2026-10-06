@@ -38,5 +38,6 @@ targets:
         NSMicrophoneUsageDescription: Микрофон нужен для голосовых сообщений и звонков в WhatsApp.
         NSPhotoLibraryUsageDescription: Доступ к фото нужен, чтобы отправлять их в WhatsApp.
         NSPhotoLibraryAddUsageDescription: Доступ нужен, чтобы сохранять фото из WhatsApp.
+        UIBackgroundModes: [audio, voip]
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true

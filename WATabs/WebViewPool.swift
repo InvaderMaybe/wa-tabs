@@ -48,8 +48,40 @@ final class WebViewPool: ObservableObject {
         try? await WKWebsiteDataStore.remove(forIdentifier: id)
     }
 
+    weak var store: AccountStore?
+
     func back(_ id: UUID) {
-        sessions[id]?.webView.evaluateJavaScript("window.__waMobile && window.__waMobile.back()")
+        run("window.__waMobile && window.__waMobile.back()", in: id)
+    }
+
+    func run(_ js: String, in id: UUID) {
+        sessions[id]?.webView.evaluateJavaScript(js)
+    }
+
+    func setKeepAlive(_ on: Bool) {
+        for id in sessions.keys { run("window.__waMobile && window.__waMobile.keepAlive(\(on))", in: id) }
+    }
+
+    fileprivate func handleMessage(_ dict: [String: Any], from id: UUID) {
+        switch dict["type"] as? String {
+        case "mode":
+            setInChat(dict["chat"] as? Bool ?? false, for: id)
+        case "ready":
+            // Страница (пере)загрузилась: включаем фоновый звук, если он нужен.
+            run("window.__waMobile && window.__waMobile.keepAlive(\(BackgroundKeeper.shared.enabled))", in: id)
+        case "message":
+            guard let account = store?.accounts.first(where: { $0.id == id }) else { return }
+            Notifier.shared.message(account: account,
+                                    chat: dict["chat"] as? String ?? "",
+                                    preview: dict["preview"] as? String ?? "")
+        case "call":
+            CallManager.shared.handle(state: dict["state"] as? String ?? "none",
+                                      caller: dict["caller"] as? String ?? "",
+                                      video: dict["video"] as? Bool ?? false,
+                                      account: id)
+        default:
+            break
+        }
     }
 
     func reload(_ id: UUID) {
@@ -147,13 +179,8 @@ final class AccountSession: NSObject {
     }
 
     fileprivate func handleMessage(_ body: Any) {
-        guard let dict = body as? [String: Any], let type = dict["type"] as? String else { return }
-        switch type {
-        case "mode":
-            pool?.setInChat(dict["chat"] as? Bool ?? false, for: id)
-        default:
-            break
-        }
+        guard let dict = body as? [String: Any] else { return }
+        pool?.handleMessage(dict, from: id)
     }
 
     private static func isWhatsApp(_ url: URL) -> Bool {

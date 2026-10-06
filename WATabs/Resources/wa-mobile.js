@@ -1,4 +1,4 @@
-// wa-mobile v2
+// wa-mobile v3
 // Мобильная обёртка WhatsApp Web: одна колонка за раз, как в приложении.
 // Режим «список»: только список чатов. Режим «чат»: только открытый чат на весь экран.
 // Если открыта панель (инфо о контакте, поиск по чату), на весь экран показывается она.
@@ -115,6 +115,107 @@
     }
   }
 
+  // ---------- Новые сообщения ----------
+  // Строка чата с непрочитанными: [role=row] с меткой aria-label «N непрочитанное сообщение».
+  // Внутри два span[title]: имя чата и превью последнего сообщения.
+  var UNREAD_RE = /(\d+)\s*(непрочит|unread)/i;
+  var unreadByChat = null;   // null до первого прохода: при запуске не уведомляем о старом
+
+  function scanMessages() {
+    var pane = document.getElementById('pane-side');
+    if (!pane) return;
+    var current = {};
+    var rows = pane.querySelectorAll('[role="row"]');
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      var count = 0;
+      var labelled = row.querySelectorAll('[aria-label]');
+      for (var j = 0; j < labelled.length; j++) {
+        var m = UNREAD_RE.exec(labelled[j].getAttribute('aria-label'));
+        if (m) { count = parseInt(m[1], 10); break; }
+      }
+      var titles = row.querySelectorAll('span[title]');
+      var name = titles[0] ? titles[0].getAttribute('title') : '';
+      if (!name) continue;
+      current[name] = count;
+      if (unreadByChat && count > (unreadByChat[name] || 0)) {
+        post({ type: 'message', chat: name, preview: titles[1] ? titles[1].getAttribute('title') : '', count: count });
+      }
+    }
+    // Чаты, которые ушли из видимой части списка, помним со старым счётчиком.
+    if (unreadByChat) for (var k in unreadByChat) if (!(k in current)) current[k] = unreadByChat[k];
+    unreadByChat = current;
+  }
+
+  // ---------- Звонки ----------
+  // Окно звонка: [role=application] (плавающее окно). Входящий: есть кнопка «Принять».
+  // Идёт разговор: есть «Завершить звонок». Заголовок вкладки: «Входящий аудиозвонок от Имя».
+  var ACCEPT = ['Принять', 'Accept'];
+  var DECLINE = ['Отклонить', 'Decline'];
+  var HANGUP = ['Завершить звонок', 'End call'];
+  var callState = 'none';
+
+  function callWindow() { return document.querySelector('[role="application"]'); }
+
+  function findButton(labels) {
+    var win = callWindow();
+    if (!win) return null;
+    var buttons = win.querySelectorAll('button, [role="button"]');
+    for (var i = 0; i < buttons.length; i++) {
+      var label = buttons[i].getAttribute('aria-label') || buttons[i].getAttribute('title') || '';
+      for (var j = 0; j < labels.length; j++) if (label === labels[j]) return buttons[i];
+    }
+    return null;
+  }
+
+  function scanCall() {
+    var state = 'none';
+    if (findButton(ACCEPT)) state = 'incoming';
+    else if (findButton(HANGUP)) state = 'active';
+    if (state === callState) return;
+    var msg = { type: 'call', state: state, from: callState };
+    if (state === 'incoming') {
+      var t = document.title;
+      var m = /от\s+(.+)$/i.exec(t) || /from\s+(.+)$/i.exec(t);
+      msg.caller = m ? m[1].trim() : '';
+      msg.video = /видео|video/i.test(t);
+    }
+    callState = state;
+    post(msg);
+  }
+
+  function press(labels) {
+    var b = findButton(labels);
+    if (b) b.click();
+    return !!b;
+  }
+
+  // ---------- Фон ----------
+  // Почти беззвучный звук в цикле: пока он играет, iOS не замораживает страницу в свёрнутом приложении.
+  var keepAlive = null;
+  function silentWav() {
+    var rate = 8000, n = rate; // 1 секунда
+    var buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    function s(o, str) { for (var i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); }
+    s(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); s(8, 'WAVE'); s(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    s(36, 'data'); v.setUint32(40, n * 2, true);
+    for (var i = 0; i < n; i++) v.setInt16(44 + i * 2, (i % 2) ? 1 : -1, true);
+    return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+  }
+  function setKeepAlive(on) {
+    if (on && !keepAlive) {
+      keepAlive = new Audio(silentWav());
+      keepAlive.loop = true;
+      keepAlive.volume = 0.01;
+      keepAlive.play().catch(function () {});
+    } else if (!on && keepAlive) {
+      keepAlive.pause();
+      keepAlive = null;
+    }
+  }
+
   // setTimeout, а не requestAnimationFrame: rAF стоит на паузе в скрытых WebView и фоновых вкладках.
   var scheduled = false;
   function schedule() {
@@ -126,8 +227,12 @@
       ensureStyle();
       tag();
       updateMode();
+      scanCall();
+      scanMessages();
     }, 30);
   }
+  // Подстраховка, если мутаций нет, а состояние поменялось.
+  setInterval(schedule, 1500);
 
   // Штатное закрытие в WhatsApp Web: Escape закрывает панель, потом чат.
   function back() {
@@ -143,13 +248,18 @@
   ensureStyle();
   new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
   schedule();
+  post({ type: 'ready', version: 3 });
 
   window.__waMobile = {
     back: back,
     refresh: schedule,
-    version: 2,
+    version: 3,
+    acceptCall: function () { return press(ACCEPT); },
+    declineCall: function () { return press(DECLINE); },
+    endCall: function () { return press(HANGUP) || press(DECLINE); },
+    keepAlive: setKeepAlive,
     state: function () {
-      return { chat: !!document.getElementById('main'), panel: panelOpen };
+      return { chat: !!document.getElementById('main'), panel: panelOpen, call: callState };
     }
   };
 })();
