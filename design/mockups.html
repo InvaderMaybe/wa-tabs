@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WA Tabs — варианты дизайна</title>
+<style>
+:root{
+  --page:#eef0f3; --ink:#1b1f24; --muted:#6b7380; --card:#fff; --line:#e3e6ea;
+  --wa:#25D366; --wa-dark:#128C7E; --bar:#f7f8fa; --chat-bg:#efeae2; --bubble:#fff; --bubble-me:#d9fdd3;
+  --phone:#111;
+}
+[data-theme="dark"]{
+  --page:#0e1114; --ink:#e7eaee; --muted:#8b95a3; --card:#1a1f25; --line:#2a313a;
+  --bar:#141a1f; --chat-bg:#0b141a; --bubble:#202c33; --bubble-me:#005c4b; --phone:#000;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:14px/1.4 -apple-system,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--page);border-bottom:1px solid var(--line);padding:14px 24px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+header h1{font-size:18px;margin:0;flex:1}
+button.t{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:6px 12px;cursor:pointer}
+main{padding:24px;display:flex;flex-direction:column;gap:40px}
+section h2{margin:0 0 4px;font-size:20px}
+section p.d{margin:0 0 16px;color:var(--muted);max-width:760px}
+.row{display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start}
+.cap{font-size:12px;color:var(--muted);margin-top:8px;text-align:center}
+
+/* телефон */
+.phone{width:300px;height:640px;border-radius:44px;background:var(--phone);padding:10px;box-shadow:0 10px 30px rgba(0,0,0,.18);position:relative;flex:none}
+.screen{width:100%;height:100%;border-radius:35px;overflow:hidden;background:var(--card);display:flex;flex-direction:column;position:relative}
+.status{height:38px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:12px;font-weight:600;background:var(--bar);flex:none}
+.island{width:84px;height:24px;border-radius:14px;background:#000;position:absolute;left:50%;top:9px;transform:translateX(-50%)}
+.homebar{height:20px;display:flex;align-items:center;justify-content:center;background:var(--bar);flex:none}
+.homebar i{width:100px;height:4px;border-radius:3px;background:var(--ink);opacity:.5}
+
+/* имитация WhatsApp Web */
+.wa{flex:1;display:flex;min-height:0;background:var(--card)}
+.list{width:100%;display:flex;flex-direction:column;min-height:0}
+.list .top{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bar);border-bottom:1px solid var(--line)}
+.list .search{margin:6px 8px;padding:6px 10px;border-radius:8px;background:var(--bar);color:var(--muted);font-size:11px}
+.chat{display:flex;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line)}
+.av{width:30px;height:30px;border-radius:50%;flex:none;display:grid;place-items:center;color:#fff;font-weight:700;font-size:12px}
+.chat .m{flex:1;min-width:0}
+.chat b{display:block;font-size:12px}
+.chat span{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat .r{text-align:right;font-size:10px;color:var(--muted)}
+.cnt{display:inline-block;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--wa);color:#fff;font-size:10px;font-weight:700;line-height:16px;text-align:center}
+
+/* A: вкладки сверху */
+.tabsTop{display:flex;gap:6px;padding:6px 8px;background:var(--bar);border-bottom:1px solid var(--line);overflow:hidden;flex:none;align-items:center}
+.pill{display:flex;align-items:center;gap:5px;padding:5px 9px;border-radius:16px;background:var(--card);border:1px solid var(--line);font-size:11px;font-weight:600;white-space:nowrap}
+.pill.on{border-color:transparent;color:#fff}
+.dot{width:8px;height:8px;border-radius:50%}
+.plus{margin-left:auto;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--card);border:1px solid var(--line);font-size:16px;flex:none}
+
+/* B: нижний бар */
+.tabsBottom{display:flex;justify-content:space-around;align-items:center;padding:8px 6px 4px;background:var(--bar);border-top:1px solid var(--line);flex:none}
+.tb{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:9px;color:var(--muted);position:relative;width:56px}
+.tb .av{width:34px;height:34px;box-shadow:0 0 0 2px var(--bar),0 0 0 4px transparent}
+.tb.on{color:var(--ink);font-weight:700}
+.tb.on .av{box-shadow:0 0 0 2px var(--bar),0 0 0 4px var(--wa)}
+.tb .cnt{position:absolute;top:-4px;right:6px}
+.tb.add .av{background:var(--card);border:1.5px dashed var(--muted);color:var(--muted);font-size:18px}
+
+/* C: шторка */
+.mini{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bar);border-bottom:1px solid var(--line);font-size:12px;font-weight:600;flex:none}
+.mini .burger{font-size:16px;width:22px}
+.mini .others{margin-left:auto;display:flex;gap:4px;align-items:center;font-weight:400;font-size:11px;color:var(--muted)}
+.drawer{position:absolute;inset:38px 60px 20px 0;background:var(--card);box-shadow:4px 0 20px rgba(0,0,0,.25);z-index:3;display:flex;flex-direction:column}
+.dim{position:absolute;inset:38px 0 20px 0;background:rgba(0,0,0,.35);z-index:2}
+.drawer h3{margin:0;padding:14px 14px 8px;font-size:15px}
+.acc{display:flex;gap:10px;align-items:center;padding:10px 14px}
+.acc.on{background:var(--bar);border-left:3px solid var(--wa);padding-left:11px}
+.acc .m{flex:1;min-width:0}
+.acc b{display:block;font-size:13px}
+.acc span{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drawer .foot{margin-top:auto;border-top:1px solid var(--line);padding:10px 14px;font-size:12px;color:var(--wa-dark);display:flex;flex-direction:column;gap:8px}
+
+/* служебные экраны */
+.nav{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bar);border-bottom:1px solid var(--line);font-size:13px;flex:none}
+.nav b{font-size:14px}
+.nav a{color:var(--wa-dark);text-decoration:none}
+.form{padding:16px;display:flex;flex-direction:column;gap:14px;flex:1;background:var(--bar)}
+.field{background:var(--card);border-radius:10px;padding:10px 12px;border:1px solid var(--line)}
+.field small{display:block;color:var(--muted);font-size:10px;margin-bottom:2px}
+.swatches{display:flex;gap:8px;flex-wrap:wrap}
+.sw{width:28px;height:28px;border-radius:50%}
+.sw.on{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--ink)}
+.qr{align-self:center;width:150px;height:150px;border-radius:8px;background:
+  repeating-conic-gradient(var(--ink) 0 25%, var(--card) 0 50%) 0 0/18px 18px;border:8px solid var(--card);outline:1px solid var(--line)}
+.hint{font-size:11px;color:var(--muted);text-align:center}
+.btn{background:var(--wa);color:#fff;text-align:center;padding:10px;border-radius:10px;font-weight:600}
+.mrow{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--card);border-bottom:1px solid var(--line)}
+.mrow .m{flex:1}
+.mrow b{display:block;font-size:13px}
+.mrow span{font-size:11px;color:var(--muted)}
+.grip{color:var(--muted);font-size:14px}
+.del{color:#e5484d;font-size:12px}
+.group{margin-top:12px;font-size:10px;color:var(--muted);padding:0 14px 6px;text-transform:uppercase;letter-spacing:.04em}
+.note{background:var(--card);border-radius:10px;margin:12px 14px;padding:10px 12px;font-size:11px;border:1px solid var(--line)}
+.note b{color:var(--wa-dark)}
+.num{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#ff7a00;color:#fff;font-size:10px;font-weight:700;margin-right:4px}
+ul.n{margin:12px 0 0;padding-left:0;list-style:none;color:var(--muted);max-width:300px;font-size:12px}
+ul.n li{margin-bottom:6px}
+</style>
+</head>
+<body data-theme="light">
+<header>
+  <h1>WA Tabs: варианты дизайна</h1>
+  <button class="t" onclick="document.body.dataset.theme = document.body.dataset.theme==='dark'?'light':'dark'">Светлая / тёмная</button>
+</header>
+<main id="m"></main>
+
+<script>
+const ACC=[
+  {n:"Вакансии IL",c:"#25D366",u:3,last:"Ахмад: Здравствуйте, вакансия ещё актуальна?"},
+  {n:"Офис",c:"#34B7F1",u:0,last:"Вы: Счёт отправил"},
+  {n:"Склад",c:"#F5A623",u:12,last:"Самир: Когда выходить?"},
+];
+const CHATS=[
+  ["Ахмад","Здравствуйте, вакансия ещё актуальна?","12:41",2,"#7E57C2"],
+  ["Мухаммед Х.","Я отправил документы","12:30",1,"#26A69A"],
+  ["Группа: Смена 2","Самир: завтра в 7","11:58",0,"#EF5350"],
+  ["Юсеф","👍","11:02",0,"#5C6BC0"],
+  ["Карим","Где находится склад?","Вчера",0,"#8D6E63"],
+  ["Рами","Голосовое сообщение 0:14","Вчера",0,"#FFA726"],
+  ["Нур","Спасибо!","Пн",0,"#EC407A"],
+];
+const chatList=()=>`<div class="list">
+  <div class="top"><div class="av" style="background:#25D366">В</div><div style="flex:1;font-size:12px;font-weight:600">Чаты</div><span style="color:var(--muted)">⋮</span></div>
+  <div class="search">🔍 Поиск или новый чат</div>
+  ${CHATS.map(c=>`<div class="chat"><div class="av" style="background:${c[4]}">${c[0][0]}</div>
+  <div class="m"><b>${c[0]}</b><span>${c[1]}</span></div>
+  <div class="r">${c[2]}<br>${c[3]?`<span class="cnt">${c[3]}</span>`:""}</div></div>`).join("")}
+</div>`;
+const phone=(inner)=>`<div class="phone"><div class="screen"><div class="island"></div>
+  <div class="status"><span>9:41</span><span>▮▮▮ ◔ ▭</span></div>${inner}<div class="homebar"><i></i></div></div></div>`;
+const init=n=>n.split(" ").map(w=>w[0]).join("").slice(0,2);
+
+const A=phone(`<div class="tabsTop">${ACC.map((a,i)=>`<div class="pill ${i==0?"on":""}" style="${i==0?`background:${a.c}`:""}">
+  ${i==0?"":`<span class="dot" style="background:${a.c}"></span>`}${a.n}${a.u?` <span class="cnt" style="${i==0?"background:#fff;color:"+a.c:""}">${a.u}</span>`:""}</div>`).join("")}
+  <div class="plus">+</div></div><div class="wa">${chatList()}</div>`);
+
+const B=phone(`<div class="wa">${chatList()}</div><div class="tabsBottom">${ACC.map((a,i)=>`<div class="tb ${i==0?"on":""}">
+  <div class="av" style="background:${a.c}">${init(a.n)}</div>${a.u?`<span class="cnt" style="background:#e5484d">${a.u}</span>`:""}<div>${a.n}</div></div>`).join("")}
+  <div class="tb add"><div class="av">+</div><div>Добавить</div></div></div>`);
+
+const miniBar=`<div class="mini"><span class="burger">☰</span><span class="dot" style="background:${ACC[0].c}"></span>${ACC[0].n}
+  <span class="others">ещё <span class="cnt" style="background:#e5484d">12</span></span></div>`;
+const C1=phone(`${miniBar}<div class="wa">${chatList()}</div>`);
+const C2=phone(`${miniBar}<div class="wa">${chatList()}</div><div class="dim"></div>
+  <div class="drawer"><h3>Аккаунты</h3>${ACC.map((a,i)=>`<div class="acc ${i==0?"on":""}">
+  <div class="av" style="background:${a.c};width:38px;height:38px">${init(a.n)}</div><div class="m"><b>${a.n}</b><span>${a.last}</span></div>
+  ${a.u?`<span class="cnt">${a.u}</span>`:""}</div>`).join("")}
+  <div class="foot"><span>＋ Добавить аккаунт</span><span>⚙ Управление</span></div></div>`);
+
+const ADD=phone(`<div class="nav"><a>Отмена</a><b>Новый аккаунт</b><a style="opacity:.4">Готово</a></div>
+  <div class="form">
+    <div class="field"><small>Название вкладки</small>Склад</div>
+    <div><div style="font-size:11px;color:var(--muted);margin-bottom:8px">Цвет</div><div class="swatches">
+      ${["#25D366","#34B7F1","#F5A623","#E94F64","#9B59B6","#1ABC9C","#F06292","#607D8B"].map((c,i)=>`<div class="sw ${i==2?"on":""}" style="background:${c}"></div>`).join("")}</div></div>
+    <div class="qr"></div>
+    <div class="hint">На телефоне с этим номером: WhatsApp Business → Связанные устройства → Привязка устройства → наведи на QR</div>
+    <div class="btn">Показать QR WhatsApp</div>
+  </div>`);
+
+const MAN=phone(`<div class="nav"><a>‹ Назад</a><b>Аккаунты</b><a>Изм.</a></div>
+  <div style="flex:1;background:var(--bar)"><div class="group">Порядок вкладок</div>
+  ${ACC.map(a=>`<div class="mrow"><span class="grip">≡</span><div class="av" style="background:${a.c}">${init(a.n)}</div>
+   <div class="m"><b>${a.n}</b><span>вход выполнен</span></div><span class="del">Выйти</span></div>`).join("")}
+  <div class="group">Сертификат</div>
+  <div class="mrow"><div class="m"><b>Подпись действует до 14 окт</b><span>Продлевается SideStore каждый день в 9:00</span></div><span class="cnt">ok</span></div>
+  <div class="group">Вид</div>
+  <div class="mrow"><div class="m"><b>Масштаб WhatsApp</b><span>85%</span></div><span style="color:var(--muted)">− +</span></div>
+  </div>`);
+
+const sec=(id,title,desc,phones,notes)=>`<section><h2>${id} ${title}</h2><p class="d">${desc}</p>
+  <div class="row">${phones.map(p=>`<div>${p[0]}<div class="cap">${p[1]}</div></div>`).join("")}
+  ${notes?`<ul class="n">${notes.map((t,i)=>`<li><span class="num">${i+1}</span>${t}</li>`).join("")}</ul>`:""}</div></section>`;
+
+document.getElementById("m").innerHTML=
+ sec("A.","Вкладки сверху, как в Safari","Цветные «пилюли» аккаунтов над WhatsApp, активная залита своим цветом, число непрочитанных прямо во вкладке. «+» добавляет аккаунт.",
+   [[A,"Главный экран"]],
+   ["Сразу видно, где сколько непрочитанных","Если аккаунтов больше 4, вкладки прокручиваются вбок","Сверху до кнопок тянуться дальше"]) +
+ sec("B.","Нижний таб-бар с аватарами","Аккаунты кружками внизу, как вкладки iOS. Под большой палец, красный бейдж непрочитанных. Свайп по бару листает аккаунты.",
+   [[B,"Главный экран"]],
+   ["Удобно одной рукой","Помещается до 4 аккаунтов и «Добавить»","Съедает немного высоты у чата"]) +
+ sec("C.","Боковая шторка","Сверху тонкая плашка с текущим аккаунтом и суммой непрочитанных в остальных. Список аккаунтов выезжает свайпом от левого края или по ☰.",
+   [[C1,"Закрыто"],[C2,"Открыто"]],
+   ["Максимум места под WhatsApp","Видно последнее сообщение каждого аккаунта","Переключение в два действия, а не в одно"]) +
+ sec("Общие","экраны (для любого варианта)","Добавление аккаунта: название, цвет и вход по QR. Управление: порядок, выход, срок сертификата, масштаб.",
+   [[ADD,"Новый аккаунт"],[MAN,"Управление"]]);
+</script>
+</body>
+</html>
