@@ -1,4 +1,5 @@
 import SwiftUI
+import WebKit
 
 struct RootView: View {
     @EnvironmentObject private var store: AccountStore
@@ -19,6 +20,9 @@ struct RootView: View {
                 EmptyStateView { showAdd = true }
             } else {
                 VStack(spacing: 0) {
+                    if WKWebpagePreferences().isLockdownModeEnabled {
+                        LockdownBanner()
+                    }
                     TopBar(inChat: currentInChat,
                            onMenu: { withAnimation(.easeOut(duration: 0.22)) { drawerOpen = true } },
                            onBack: { if let id = store.selectedID { pool.back(id) } })
@@ -90,6 +94,21 @@ private struct TopBar: View {
         .frame(height: 44)
         .background(.bar)
         .overlay(alignment: .bottom) { Divider() }
+    }
+}
+
+/// Режим блокировки iOS выключает IndexedDB, и WhatsApp Web висит на загрузке QR.
+private struct LockdownBanner: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label("Включён режим блокировки", systemImage: "lock.shield.fill").font(.subheadline.bold())
+            Text("WhatsApp не загрузится. Настройки → Конфиденциальность и безопасность → Режим блокировки → Настроить веб-просмотр → выключи WA Tabs, затем перезапусти приложение.")
+                .font(.footnote)
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.orange)
     }
 }
 
