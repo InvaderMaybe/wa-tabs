@@ -33,6 +33,18 @@ final class WebViewPool: ObservableObject {
         }
     }
 
+    /// Анимации WhatsApp Web выключены по умолчанию: на телефоне они тормозят.
+    var reduceMotion: Bool {
+        get { UserDefaults.standard.object(forKey: "reduceMotion") as? Bool ?? true }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "reduceMotion")
+            for id in sessions.keys {
+                run("window.__waMobile && window.__waMobile.reduceMotion && window.__waMobile.reduceMotion(\(newValue))", in: id)
+            }
+            objectWillChange.send()
+        }
+    }
+
     var totalUnread: Int { unread.values.reduce(0, +) }
 
     func webView(for id: UUID) -> WKWebView? { sessions[id]?.webView }
@@ -84,8 +96,9 @@ final class WebViewPool: ObservableObject {
         case "mode":
             setInChat(dict["chat"] as? Bool ?? false, for: id)
         case "ready":
-            // Страница (пере)загрузилась: включаем фоновый звук, если он нужен.
+            // Страница (пере)загрузилась: фоновый звук и анимации по настройкам.
             run("window.__waMobile && window.__waMobile.keepAlive(\(BackgroundKeeper.shared.enabled))", in: id)
+            run("window.__waMobile && window.__waMobile.reduceMotion && window.__waMobile.reduceMotion(\(reduceMotion))", in: id)
         case "message":
             guard let account = store?.accounts.first(where: { $0.id == id }) else { return }
             Notifier.shared.message(account: account,
@@ -157,8 +170,14 @@ final class AccountSession: NSObject {
         webView.pageZoom = pool.zoom
         webView.backgroundColor = .systemBackground
         webView.isOpaque = false
+        // WhatsApp Web сам прокручивает свои колонки. Если даёт прокручиваться и внешнему скроллу WebView,
+        // iOS при открытии клавиатуры сдвигает всю страницу вверх, а SwiftUI ещё и ужимает её под клавиатуру.
+        webView.scrollView.isScrollEnabled = false
+        webView.scrollView.bounces = false
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
 
         super.init()
+        webView.scrollView.delegate = self
 
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -334,6 +353,15 @@ extension AccountSession: WKUIDelegate {
                  initiatedByFrame frame: WKFrameInfo) async -> Bool {
         await UIPresenter.alert(message, cancellable: true)
     }
+}
+
+extension AccountSession: UIScrollViewDelegate {
+    /// Внешний скролл WebView всегда в нуле: иначе при фокусе на поле ввода iOS сдвигает страницу.
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        if scrollView.contentOffset != .zero { scrollView.contentOffset = .zero }
+    }
+
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? { nil }
 }
 
 /// WKUserContentController держит обработчик сильной ссылкой, поэтому прокладка со слабой.

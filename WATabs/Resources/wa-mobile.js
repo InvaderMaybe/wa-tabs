@@ -1,12 +1,18 @@
-// wa-mobile v4
+// wa-mobile v5
 // Мобильная обёртка WhatsApp Web: одна колонка за раз, как в приложении.
 // Режим «список»: только список чатов. Режим «чат»: только открытый чат на весь экран.
 // Если открыта панель (инфо о контакте, поиск по чату), на весь экран показывается она.
 //
 // Раскладка WhatsApp Web (проверено 2026-10): общий flex-контейнер, в нём по порядку
-//   HEADER (полоса иконок) | [absolute-слои] | колонка #side | колонка чата (#main или заставка)
+//   HEADER (полоса иконок) | [absolute-слои левых панелей] | колонка #side | колонка чата (#main или заставка)
 //   | [absolute-слой] | колонка панели | ... | #wds-toast-container (fixed)
-// Absolute и fixed слои (меню, просмотр медиа, тосты) не трогаем.
+// Absolute-слои перед списком декоративные (pointer-events: none), рисуют рамки по краям десктопных колонок:
+// в режиме чата прячем их, в режиме списка убираем рамки. Остальные absolute/fixed не трогаем.
+//
+// Производительность: WhatsApp меняет DOM десятки раз в секунду. Поэтому
+//   - getComputedStyle только когда поменялся состав колонок (кэш по списку детей контейнера);
+//   - поиск новых сообщений только когда поменялся заголовок вкладки (счётчик непрочитанных);
+//   - все проверки склеиваются в один проход не чаще раза в 60 мс.
 (function () {
   if (window.__waMobile) return;
 
@@ -15,6 +21,7 @@
   };
 
   // maximum-scale=1 убирает автозум iOS при фокусе на поле ввода.
+  var VIEWPORT = 'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover';
   function ensureViewport() {
     var meta = document.querySelector('meta[name="viewport"]');
     if (!meta) {
@@ -22,8 +29,7 @@
       meta.name = 'viewport';
       (document.head || document.documentElement).appendChild(meta);
     }
-    var want = 'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover';
-    if (meta.content !== want) meta.content = want;
+    if (meta.content !== VIEWPORT) meta.content = VIEWPORT;
   }
 
   var css = [
@@ -33,8 +39,12 @@
     // список
     'html:not(.wa-chat) [data-wa-col="main"], html:not(.wa-chat) [data-wa-col="panel"] { display: none !important; }',
     'html:not(.wa-chat) [data-wa-col="side"] { flex: 1 1 auto !important; width: auto !important; }',
+    // Декоративный слой с рамками по краям десктопных колонок (pointer-events: none): на телефоне это полосы.
+    '[data-wa-col="layer"] * { border-left-width: 0 !important; border-right-width: 0 !important; }',
+    // Без анимаций WhatsApp Web на телефоне заметно отзывчивее (переключатель в «Управлении»).
+    'html.wa-nomotion *, html.wa-nomotion *::before, html.wa-nomotion *::after { animation-duration: 0.001s !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: 0.001s !important; transition-delay: 0s !important; }',
     // чат
-    'html.wa-chat [data-wa-col="side"], html.wa-chat [data-wa-col="rail"] { display: none !important; }',
+    'html.wa-chat [data-wa-col="side"], html.wa-chat [data-wa-col="rail"], html.wa-chat [data-wa-col="layer"] { display: none !important; }',
     'html.wa-chat:not(.wa-panel) [data-wa-col="panel"] { display: none !important; }',
     'html.wa-chat:not(.wa-panel) [data-wa-col="main"] { flex: 1 1 auto !important; width: 100% !important; }',
     // панель поверх чата
@@ -62,6 +72,10 @@
     else if (el.getAttribute(name) !== value) el.setAttribute(name, value);
   }
 
+  // ---------- Колонки ----------
+  var root = null, sideCol = null, children = [], panels = [];
+  var panelOpen = false;
+
   // Общий контейнер колонок: ближайший предок #side, у которого после колонки списка
   // есть ещё колонка в потоке (чат или заставка).
   function findColumns(side) {
@@ -76,31 +90,50 @@
     return null;
   }
 
-  var panelOpen = false;
+  function sameChildren() {
+    var list = root.children;
+    if (list.length !== children.length) return false;
+    for (var i = 0; i < list.length; i++) if (list[i] !== children[i]) return false;
+    return true;
+  }
+
+  // Дорогая часть (getComputedStyle): только когда поменялся состав колонок.
+  function classify() {
+    children = Array.prototype.slice.call(root.children);
+    panels = [];
+    var after = false, mainSeen = false;
+    for (var i = 0; i < children.length; i++) {
+      var child = children[i];
+      if (child === sideCol) { set(child, 'data-wa-col', 'side'); after = true; continue; }
+      if (!inFlow(child)) { set(child, 'data-wa-col', after ? null : 'layer'); continue; }
+      if (!after) { set(child, 'data-wa-col', 'rail'); continue; }
+      if (!mainSeen) { set(child, 'data-wa-col', 'main'); mainSeen = true; continue; }
+      set(child, 'data-wa-col', 'panel');
+      panels.push(child);
+    }
+  }
 
   function tag() {
     var side = document.getElementById('side');
     if (!side) return;
-    var found = findColumns(side);
-    if (!found) return;
-    var root = found.root;
-    set(root, 'data-wa-root', '');
-    // Вошли в аккаунт: теперь можно запрещать горизонтальную прокрутку (на экране входа она нужна).
-    document.documentElement.classList.add('wa-ready');
+    if (!root || !root.isConnected || !sideCol || !sideCol.contains(side) || sideCol.parentElement !== root) {
+      var found = findColumns(side);
+      if (!found) return;
+      root = found.root;
+      sideCol = found.side;
+      children = [];
+      set(root, 'data-wa-root', '');
+      // Вошли в аккаунт: теперь можно запрещать горизонтальную прокрутку (на экране входа она нужна).
+      document.documentElement.classList.add('wa-ready');
+    }
+    if (!sameChildren()) classify();
 
-    var after = false, mainSeen = false;
+    // Дешёвая часть каждый проход: открыта ли панель справа от чата.
     panelOpen = false;
-    for (var i = 0; i < root.children.length; i++) {
-      var child = root.children[i];
-      if (child === found.side) { set(child, 'data-wa-col', 'side'); after = true; continue; }
-      if (!inFlow(child)) { set(child, 'data-wa-col', null); continue; }
-      if (!after) { set(child, 'data-wa-col', 'rail'); continue; }
-      if (!mainSeen) { set(child, 'data-wa-col', 'main'); mainSeen = true; continue; }
-      set(child, 'data-wa-col', 'panel');
-      // Закрытая панель: пустой первый ребёнок. Открытая: в нём есть содержимое.
-      var first = child.firstElementChild;
+    for (var i = 0; i < panels.length; i++) {
+      var first = panels[i].firstElementChild;
       var open = !!(first && first.childElementCount > 0);
-      set(child, 'data-wa-open', open ? '' : null);
+      set(panels[i], 'data-wa-open', open ? '' : null);
       if (open) panelOpen = true;
     }
   }
@@ -122,10 +155,14 @@
   // Внутри два span[title]: имя чата и превью последнего сообщения.
   var UNREAD_RE = /(\d+)\s*(непрочит|unread)/i;
   var unreadByChat = null;   // null до первого прохода: при запуске не уведомляем о старом
+  var lastTitle = null;
 
   function scanMessages() {
     var pane = document.getElementById('pane-side');
     if (!pane) return;
+    // Счётчик непрочитанных в заголовке не поменялся: новых сообщений нет, список не трогаем.
+    if (unreadByChat && document.title === lastTitle) return;
+    lastTitle = document.title;
     var current = {};
     var rows = pane.querySelectorAll('[role="row"]');
     for (var i = 0; i < rows.length; i++) {
@@ -157,10 +194,8 @@
   var HANGUP = ['Завершить звонок', 'End call'];
   var callState = 'none';
 
-  function callWindow() { return document.querySelector('[role="application"]'); }
-
   function findButton(labels) {
-    var win = callWindow();
+    var win = document.querySelector('[role="application"]');
     if (!win) return null;
     var buttons = win.querySelectorAll('button, [role="button"]');
     for (var i = 0; i < buttons.length; i++) {
@@ -172,8 +207,10 @@
 
   function scanCall() {
     var state = 'none';
-    if (findButton(ACCEPT)) state = 'incoming';
-    else if (findButton(HANGUP)) state = 'active';
+    if (document.querySelector('[role="application"]')) {
+      if (findButton(ACCEPT)) state = 'incoming';
+      else if (findButton(HANGUP)) state = 'active';
+    }
     if (state === callState) return;
     var msg = { type: 'call', state: state, from: callState };
     if (state === 'incoming') {
@@ -218,23 +255,24 @@
     }
   }
 
+  // ---------- Цикл ----------
   // setTimeout, а не requestAnimationFrame: rAF стоит на паузе в скрытых WebView и фоновых вкладках.
   var scheduled = false;
+  function run() {
+    scheduled = false;
+    ensureStyle();
+    tag();
+    updateMode();
+    scanCall();
+    scanMessages();
+  }
   function schedule() {
     if (scheduled) return;
     scheduled = true;
-    setTimeout(function () {
-      scheduled = false;
-      ensureViewport();
-      ensureStyle();
-      tag();
-      updateMode();
-      scanCall();
-      scanMessages();
-    }, 30);
+    setTimeout(run, 60);
   }
   // Подстраховка, если мутаций нет, а состояние поменялось.
-  setInterval(schedule, 1500);
+  setInterval(schedule, 2000);
 
   // Штатное закрытие в WhatsApp Web: Escape закрывает панель, потом чат.
   function back() {
@@ -248,18 +286,21 @@
 
   ensureViewport();
   ensureStyle();
+  // Viewport WhatsApp ставит один раз при загрузке, следить за ним в каждом проходе незачем.
+  setTimeout(ensureViewport, 3000);
   new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
   schedule();
-  post({ type: 'ready', version: 4 });
+  post({ type: 'ready', version: 5 });
 
   window.__waMobile = {
     back: back,
     refresh: schedule,
-    version: 4,
+    version: 5,
     acceptCall: function () { return press(ACCEPT); },
     declineCall: function () { return press(DECLINE); },
     endCall: function () { return press(HANGUP) || press(DECLINE); },
     keepAlive: setKeepAlive,
+    reduceMotion: function (on) { document.documentElement.classList.toggle('wa-nomotion', !!on); },
     state: function () {
       return { chat: !!document.getElementById('main'), panel: panelOpen, call: callState };
     }

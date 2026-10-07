@@ -28,6 +28,9 @@ struct ManageAccountsView: View {
                 }
 
                 Section("Вид") {
+                    Toggle("Без анимаций (быстрее)", isOn: Binding(
+                        get: { pool.reduceMotion },
+                        set: { pool.reduceMotion = $0 }))
                     VStack(alignment: .leading) {
                         Text("Масштаб WhatsApp: \(Int(zoom * 100))%")
                         Slider(value: $zoom, in: 0.6...1.4, step: 0.05) { editing in
